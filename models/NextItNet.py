@@ -4,22 +4,22 @@ import torch.nn.functional as F
 
 class NextItNet(nn.Module):
 
-    def __init__(self, model_config):
+    def __init__(self, config):
 
         super(NextItNet, self).__init__()
 
-        assert model_config['model_type'] == "NextItNet", "Wrong config file of the model, expected NextItNet, but get {}.\n".format(model_config["model_type"])
+        assert config['model_type'].lower() == "nextitnet", "Wrong config file of the model, expected NextItNet, but get {}.\n".format(config["model_type"])
 
-        self.item_num = model_config['item_num']
-        self.embed_size = model_config['embed_size']
+        self.item_num = config['item_num']
+        self.embed_size = config['embed_size']
         self.item_embedding = nn.Embedding(self.item_num, self.embed_size)
         stdv = np.sqrt(1. / self.item_size)
         self.item_embedding.weight.data.uniform_(-stdv, stdv) # important initializer
 
-        self.hidden_size = model_config['hidden_size']
+        self.hidden_size = config['hidden_size']
 
-        rb = [ResidualBlock(self.hidden_size, self.hidden_size, model_config['kernel_size'],
-                            dilation_size) for dilation_size in model_config['dilations']]
+        rb = [ResidualBlock(self.hidden_size, self.hidden_size, config['kernel_size'],
+                            dilation_size) for dilation_size in config['dilations']]
 
         self.residual_blocks = nn.Sequential(*rb) 
 
