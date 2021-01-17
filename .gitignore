@@ -1,7 +1,7 @@
 # Byte-compiled / optimized / DLL files
 
 .vscode/
-Dataset/*
+Dataset/*.csv
 
 __pycache__/
 *.py[cod]
