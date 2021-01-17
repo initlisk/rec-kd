@@ -1,116 +1,177 @@
 import numpy as np
+from torch.utils.data import RandomSampler, SequentialSampler, DataLoader
+from torch.utils.data.dataset import TensorDataset
+import collections
 import torch
-from torch.autograd import Variable
-import torch.nn as nn
-import time
-from generator_recsys import NextItNet_Decoder
-import torch.nn.functional as F 
+
+def train(model, config,  train_dataloader, eval_dataloader):
+    total_train_time = 0.
+
+    loss_func = get_loss()
+
+    for _epoch in trange(int(config['epochs']), desc="Epoch"):
+        model.train()
+        train_loss = 0
+        correct = 0
+        total = 0 
+
+        logger.info("------------------------train-----------------------------")
+        start = time.time()
+        for batch_idx, batch in enumerate(tqdm(train_dataloader, desc="Iteration", ascii=True)):
+            inputs, targets = batch
+            inputs = inputs.to(args.device)
+            targets = targets.reshape(-1).to(args.device)
+            optimizer.zero_grad()
+            
+            loss = model(inputs)
+
+            loss.backward()
+        
+            optimizer.step()
+
+            train_loss += loss.item()
+            _, predicted = logits.max(1)
+            total += targets.size(0)
+            correct += predicted.eq(targets).sum().item()
+
+            if batch_idx==0 or (batch_idx+1) % max(10, batch_num//10)  == 0:
+                logger.info("epoch: {}\t {}/{}".format(_epoch+1, batch_idx+1, batch_num))
+                logger.info('Loss: %.3f | Acc(hit@1): %.3f%% (%d/%d)' % (
+                    train_loss / (batch_idx + 1), 100. * correct / total, correct, total))
+             
+            # break
+                    
+
+        end = time.time()
+        total_train_time += end - start
+        logger.info("Time for {}'th epoch: {} mins, time for {} epoches: {} hours".\
+            format(_epoch+1, round((end - start) / 60, 2), _epoch+1, round(total_train_time / 3600, 2)))
+        
+
+        if _epoch >= args.eval_begin_epochs or _epoch % args.eval_per_epochs == 0:
+            do_eval(model, eval_dataloader, args, _epoch+1)
+
+        if args.shrink_lr:
+            lr_scheduler.step()
 
 
-def sample_top(a=[], top_k=10):
-    idx = np.argsort(a)[::-1]
-    idx = idx[:top_k]
-    probs = a[idx]
-    probs = probs / np.sum(probs)
-    choice = np.random.choice(idx, p=probs)
-    return choice
+def accuracy(output, target, topk=(5, 20)): # output: [batch_size, item_size] target: [batch_size]
+    """Computes the accuracy over the k top predictions for the specified values of k"""
+    global curr_preds_5
+    global rec_preds_5
+    global ndcg_preds_5
+    global curr_preds_20
+    global rec_preds_20
+    global ndcg_preds_20
 
-# fajie
-def sample_top_k(a=[], top_k=10):
-    idx = np.argsort(a)[::-1]
-    idx = idx[:top_k]
-    # probs = a[idx]
-    # probs = probs / np.sum(probs)
-    # choice = np.random.choice(idx, p=probs)
-    return idx
+    for bi in range(output.shape[0]):
+        pred_items_5 = utils.sample_top_k(output[bi], top_k=topk[0])  # top_k=5
+        pred_items_20 = utils.sample_top_k(output[bi], top_k=topk[1])
 
-# print(sample_top_k(np.array([0.02,0.01,0.01,0.16,0.8]),3))
+        true_item=target[bi]
+        predictmap_5={ch : i for i, ch in enumerate(pred_items_5)}
+        pred_items_20 = {ch: i for i, ch in enumerate(pred_items_20)}
 
-def to_var(x, requires_grad=False, volatile=False):
-    """
-    Varialbe type that automatically choose cpu or cuda
-    """
-    if torch.cuda.is_available():
-        x = x.cuda()
-    return Variable(x, requires_grad=requires_grad, volatile=volatile)
+        rank_5 = predictmap_5.get(true_item)
+        rank_20 = pred_items_20.get(true_item)
+        if rank_5 == None:
+            curr_preds_5.append(0.0)
+            rec_preds_5.append(0.0)
+            ndcg_preds_5.append(0.0)
+        else:
+            MRR_5 = 1.0/(rank_5+1)
+            Rec_5 = 1.0#3
+            ndcg_5 = 1.0 / math.log(rank_5 + 2, 2)  # 3
+            curr_preds_5.append(MRR_5)
+            rec_preds_5.append(Rec_5)#4
+            ndcg_preds_5.append(ndcg_5)  # 4
+        if rank_20 == None:
+            curr_preds_20.append(0.0)
+            rec_preds_20.append(0.0)#2
+            ndcg_preds_20.append(0.0)#2
+        else:
+            MRR_20 = 1.0/(rank_20+1)
+            Rec_20 = 1.0#3
+            ndcg_20 = 1.0 / math.log(rank_20 + 2, 2)  # 3
+            curr_preds_20.append(MRR_20)
+            rec_preds_20.append(Rec_20)#4
+            ndcg_preds_20.append(ndcg_20)  # 4
 
+def get_dataloader(config):
+    pad = "<PAD>"
+    examples = open(config, "r").readlines()
+    examples = [s for s in examples]
+    max_length = max([len(x.strip().split(",")) for x in examples])
+    item_freq = {pad: 0}
 
-def prune_rate(model, verbose=True):
-    """
-    Print out prune rate for each layer and the whole network
-    """
-    total_nb_param = 0
-    nb_zero_param = 0
-
-    layer_id = 0
-
-    for parameter in model.parameters():
-
-        param_this_layer = 1
-        for dim in parameter.data.size():
-            param_this_layer *= dim
-        total_nb_param += param_this_layer
-
-        # only pruning linear and conv layers
-        if len(parameter.data.size()) != 1:
-            layer_id += 1
-            zero_param_this_layer = \
-                np.count_nonzero(parameter.cpu().data.numpy() == 0)
-            nb_zero_param += zero_param_this_layer
-
-            if verbose:
-                print("Layer {} | {} layer | {:.2f}% parameters pruned" \
-                    .format(
-                    layer_id,
-                    'Conv' if len(parameter.data.size()) == 4 \
-                        else 'Linear',
-                    100. * zero_param_this_layer / param_this_layer,
-                ))
-    pruning_perc = 100. * nb_zero_param / total_nb_param
-    if verbose:
-        print("Final pruning rate: {:.2f}%".format(pruning_perc))
-    return pruning_perc
-
-
-def arg_nonzero_min(a):
-    """
-    nonzero argmin of a non-negative array
-    """
-
-    if not a:
-        return
-
-    min_ix, min_v = None, None
-    # find the starting value (should be nonzero)
-    for i, e in enumerate(a):
-        if e != 0:
-            min_ix = i
-            min_v = e
-    if not min_ix:
-        print('Warning: all zero')
-        return np.inf, np.inf
-
-    # search for the smallest nonzero
-    for i, e in enumerate(a):
-        if e < min_v and e != 0:
-            min_v = e
-            min_ix = i
-
-    return min_v, min_ix
-
-
-def getOneHot(y): #[batch_size, class_num]
-    shape = y.size()
-    _, ind = y.max(dim=-1)
-    y_hard = torch.zeros_like(y).view(-1, shape[-1])
-    y_hard.scatter_(1, ind.view(-1, 1), 1)
-    y_hard = y_hard.view(*shape)
-    return y_hard
-
-def softmax(x):
-    """Compute softmax values for each sets of scores in x."""
-    e_x = np.exp(x - np.max(x))
-    return e_x / e_x.sum(axis=0) # only difference
-
-
+    for _example in examples:
+        items_list = _example.strip().split(",")
+        for item in items_list:
+            if item in item_freq.keys(): 
+                item_freq[item] += 1
+            else:
+                item_freq[item] = 1
+        item_freq[pad] += max_length - len(items_list)
     
+    count_pairs = sorted(item_freq.items(), key=lambda x: (-x[1], x[0]))
+    item_vocab, _ = list(zip(*count_pairs))
+    item2id = dict(zip(item_vocab, range(len(item_vocab))))
+
+    # item_freq = {item2id[key]:value for key, value in item_freq.items()}
+    pad_id = item2id[pad]
+    examples2id = []
+    
+    s = set()
+    item_freq = collections.defaultdict(lambda : 0)
+    for _example in examples: 
+        _example2id = []
+        s.clear()
+        for item in _example.strip().split(','):
+            t = item2id[item]
+            _example2id.append(t)
+            s.add(t)
+        _example2id = ([pad_id] * (max_length - len(_example2id))) + _example2id
+        for _id in s:
+            item_freq[_id] += 1
+
+        examples2id.append(_example2id)
+        
+    examples = np.array(examples2id)
+    t = len(examples2id)
+    min_val = 10000000
+    for _key in item_freq:
+        t = np.log(item_freq[_key])
+        if t < min_val:
+            min_val = t
+        item_freq[_key] = t
+
+
+      
+    item_freq[pad_id] = min_val
+
+    eval_examples_index = -1 * int(config.eval_percentage * float(len(examples)))
+    train_examples, eval_examples = examples[:eval_examples_index], examples[eval_examples_index:]
+
+    train_data = get_tensor_data(train_examples, "train")
+    train_sampler = RandomSampler(train_data)
+    train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=config.batch_size)
+
+    eval_data = get_tensor_data(eval_examples, "eval")
+    eval_sampler = SequentialSampler(eval_data)
+    eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=config.batch_size)
+
+    return train_dataloader, eval_dataloader, len(item_vocab)
+
+def get_tensor_data(examples, data_type):
+    assert data_type in ["train", "eval"]
+    
+    all_input_ids = torch.tensor(examples[:, :-1], dtype=torch.long)
+
+    if data_type == "train":
+        all_target_ids = torch.tensor(examples[:, 1:], dtype=torch.long)
+    else:
+        all_target_ids = torch.tensor(examples[:, -1], dtype=torch.long)
+    
+    tensor_data = TensorDataset(all_input_ids, all_target_ids)
+
+    return tensor_data

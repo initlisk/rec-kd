@@ -1,5 +1,7 @@
 import argparse
-import os
+from Utils import *
+
+
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
@@ -11,17 +13,22 @@ if __name__ == '__main__':
 	
 	parser.add_argument('--device', type=str, default='cuda:0')
 
-	opt = parser.parse_args()
-	print(opt)
+	args = parser.parse_args()
+	print(args)
 	print ('\n')
 
-	if opt.kd_method == "null":
-		config = SRS_Config()
-	elif opt.kd_method == "bertemd":
-		config = KD_Config()
-	
-	model = get_model(config)
+	if args.kd_method == "null":
+		from Config import SRS_Config as Config
+		if args.srs == 'nextitnet':
+			from models.NextItNet import NextItNet as Model
+		elif args.srs == 'sasrec':
+			from models.SASRec import SASRec as Model
+	elif args.kd_method == 'bertemd':
+		pass
 
-	train_dataloader, eval_dataloader = get_loaders()
+	config = Config(args)
+	train_dataloader, eval_dataloader, item_num = get_dataloader(config)
+	config.item_num = item_num
+	model = Model(config)
 
-	train()
+	train(model, config, train_dataloader, eval_dataloader)
