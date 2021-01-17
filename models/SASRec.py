@@ -33,17 +33,17 @@ class SASRec(nn.Module):
         
     def forward(self, x, onecall=False): # inputs: [batch_size, seq_len]
         
-        hidden_output = []
+        hidden_outputs = []
 
         x = self.item_embedding(x) # [batch_size, seq_len, embed_size]   
         pos = self.pos_embedding(torch.arange(self.seq_len-1).to(self.device))  
         x += pos  
-        hidden_output.append(x)
+        hidden_outputs.append(x)
 
         for tb in self.transformer_blocks:
             x, attn = tb(x)
-            hidden_output.append(attn)
-            hidden_output.append(x)
+            hidden_outputs.append(attn)
+            hidden_outputs.append(x)
             
         x = self.layer_norm(x) 
         
@@ -55,7 +55,7 @@ class SASRec(nn.Module):
         
         logits = torch.matmul(final_hidden, self.item_embedding.weight.t())
 
-        return logits, hidden_output
+        return logits, hidden_outputs
 
 class MultiHeadAttention(nn.Module):
     ''' Multi-Head Attention module '''

@@ -29,15 +29,15 @@ class NextItNet(nn.Module):
 
     def forward(self, x, onecall=False): # inputs: [batch_size, seq_len]
         
-        hidden_output = []
+        hidden_outputs = []
 
         x = self.item_embedding(x) # [batch_size, seq_len, embed_size]       
-        hidden_output.append(x)
+        hidden_outputs.append(x)
 
         for rb in self.residual_blocks:
             hid, x = rb(x)
-            hidden_output.append(hid)
-            hidden_output.append(x)
+            hidden_outputs.append(hid)
+            hidden_outputs.append(x)
             
         if onecall:
             final_hidden = x[:, -1, :].view(-1, self.hidden_size) # [batch_size, embed_size]
@@ -46,7 +46,7 @@ class NextItNet(nn.Module):
         
         logits = self.final_layer(final_hidden)
 
-        return logits, hidden_output
+        return logits, hidden_outputs
 
 
 # nextitnet中的残差块

@@ -6,6 +6,24 @@ import torch
 from torch.utils.data.dataset import TensorDataset
 import collections
 
+def get_dataloader(data_file):
+    all_examples, item_vocab, item2id, id2item, item_weight, max_length = data_preprocess(args.data_file)
+    # Split train/test set
+    eval_examples_index = -1 * int(args.eval_percentage * float(len(all_examples)))
+    train_examples, eval_examples = all_examples[:eval_examples_index], all_examples[eval_examples_index:]
+    batch_num = len(train_examples) // args.batch_size + 1
+
+    train_data = get_tensor_data(train_examples, "train")
+    train_sampler = RandomSampler(train_data)
+    train_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.batch_size)
+
+    eval_data = get_tensor_data(eval_examples, "eval")
+    eval_sampler = SequentialSampler(eval_data)
+    eval_dataloader = DataLoader(eval_data, sampler=eval_sampler, batch_size=args.batch_size)
+
+    return train_dataloader, eval_dataloader
+
+
 def data_preprocess(data_file):
     pad = "<PAD>"
     examples = open(data_file, "r").readlines()
