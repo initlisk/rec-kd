@@ -8,18 +8,18 @@ class NextItNet(nn.Module):
 
         super(NextItNet, self).__init__()
 
-        assert config['model_type'].lower() == "nextitnet", "Wrong config file of the model, expected NextItNet, but get {}.\n".format(config["model_type"])
+        assert config.srs.lower() == "nextitnet", "Wrong config file of the model, expected NextItNet, but get {}.\n".format(config["model_type"])
 
-        self.item_num = config['item_num']
-        self.embed_size = config['embed_size']
+        self.item_num = config.item_num
+        self.embed_size = config.embed_size
         self.item_embedding = nn.Embedding(self.item_num, self.embed_size)
-        stdv = np.sqrt(1. / self.item_size)
+        stdv = np.sqrt(1. / self.item_num)
         self.item_embedding.weight.data.uniform_(-stdv, stdv) # important initializer
 
-        self.hidden_size = config['hidden_size']
+        self.hidden_size = config.hidden_size
 
-        rb = [ResidualBlock(self.hidden_size, self.hidden_size, config['kernel_size'],
-                            dilation_size) for dilation_size in config['dilations']]
+        rb = [ResidualBlock(self.hidden_size, self.hidden_size, config.kernel_size,
+                            dilation_size) for dilation_size in config.dilations]
 
         self.residual_blocks = nn.Sequential(*rb) 
 

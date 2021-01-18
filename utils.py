@@ -99,7 +99,7 @@ def accuracy(output, target, topk=(5, 20)): # output: [batch_size, item_size] ta
 
 def get_dataloader(config):
     pad = "<PAD>"
-    examples = open(config, "r").readlines()
+    examples = open(config.dataset_path, "r").readlines()
     examples = [s for s in examples]
     max_length = max([len(x.strip().split(",")) for x in examples])
     item_freq = {pad: 0}

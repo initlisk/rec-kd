@@ -36,7 +36,7 @@ class SRS_Config(BaseConfig):
 		self.embed_size = 256
 		self.hidden_size = 256
 		if self.srs.lower() == 'nextitnet':
-			self.dilations = [1, 4] * 8
+			self.dilations = [1, 4] * 3
 			self.kernel_size = 3
 		elif self.srs.lower() == 'sasres':
 			self.seq_len = 20

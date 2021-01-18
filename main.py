@@ -6,7 +6,7 @@ from Utils import *
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 
-	parser.add_argument('--kd_method', type=str, default='null')
+	parser.add_argument('--kd_method', type=str, default='scratch')
 	parser.add_argument('--srs', type=str, default='nextitnet')
 	# dataset
 	parser.add_argument('--dataset', type=str, default='weishi')
@@ -17,7 +17,7 @@ if __name__ == '__main__':
 	print(args)
 	print ('\n')
 
-	if args.kd_method == "null":
+	if args.kd_method == "scratch":
 		from Config import SRS_Config as Config
 		if args.srs == 'nextitnet':
 			from models.NextItNet import NextItNet as Model
