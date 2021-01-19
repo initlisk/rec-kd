@@ -1,15 +1,49 @@
+import torch.nn as nn
+import time
+import math
 import numpy as np
-from torch.utils.data import RandomSampler, SequentialSampler, DataLoader
-from torch.utils.data.dataset import TensorDataset
+import torch.nn.functional as F
+import logging
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
+import sys
+from tqdm import tqdm, trange
+from pyemd import emd_with_flow
 import collections
 import torch
 
 def train(model, config,  train_dataloader, eval_dataloader):
-    total_train_time = 0.
 
-    loss_func = get_loss()
+    log_format = '%(asctime)s   %(message)s'
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO,
+                        format=log_format, datefmt='%m/%d %I:%M:%S %p')
+    fh = logging.FileHandler(config.log_path, mode='w')
+    fh.setFormatter(logging.Formatter(log_format))
+    logging.getLogger().addHandler(fh)
+    logger = logging.getLogger()
 
-    for _epoch in trange(int(config['epochs']), desc="Epoch"):
+    others_p = []
+    decay_p = []
+    for name, p in model.named_parameters():
+        if 'bias' in name:
+            others_p += [p]
+        else:
+            decay_p += [p]
+    params = [{'params': decay_p, 'weight_decay':config.reg},\
+                    {'params': others_p, 'weight_decay':0}]
+    optimizer = torch.optim.Adam(params, lr=config.lr)
+
+    batch_num = len(train_dataloader)
+
+    total_train_time = 0.0
+
+    best_scores = None
+
+    no_imporve_epoch = 0
+
+    if config.kd_method == "scratch":
+        loss_func = nn.CrossEntropyLoss()
+    
+    for _epoch in trange(int(config.max_epoch), desc="Epoch"):
         model.train()
         train_loss = 0
         correct = 0
@@ -17,13 +51,18 @@ def train(model, config,  train_dataloader, eval_dataloader):
 
         logger.info("------------------------train-----------------------------")
         start = time.time()
+        model.train()
         for batch_idx, batch in enumerate(tqdm(train_dataloader, desc="Iteration", ascii=True)):
             inputs, targets = batch
-            inputs = inputs.to(args.device)
-            targets = targets.reshape(-1).to(args.device)
+            inputs = inputs.to(config.device)
+            targets = targets.reshape(-1).to(config.device)
             optimizer.zero_grad()
             
-            loss = model(inputs)
+            if config.kd_method == "scratch":
+                logits, _ = model(inputs)
+                loss = loss_func(logits, targets)
+            else:
+                loss, logits = model(inputs) 
 
             loss.backward()
         
@@ -48,25 +87,108 @@ def train(model, config,  train_dataloader, eval_dataloader):
             format(_epoch+1, round((end - start) / 60, 2), _epoch+1, round(total_train_time / 3600, 2)))
         
 
-        if _epoch >= args.eval_begin_epochs or _epoch % args.eval_per_epochs == 0:
-            do_eval(model, eval_dataloader, args, _epoch+1)
+        if _epoch >= config.eval_begin_epochs or _epoch % config.eval_per_epochs == 0:
+            scores = do_eval(model, config, eval_dataloader,logger, _epoch+1)
+            no_imporve_epoch += 1
+            if is_better(scores, best_scores):
+                state = {
+                    'net': model.state_dict(),
+                    'scores': scores,
+                }
+                best_scores = scores
+                torch.save(state, config.save_path)
+                no_imporve_epoch = 0
+            if no_imporve_epoch > config.early_stop:
+                return
+    
 
-        if args.shrink_lr:
-            lr_scheduler.step()
+def do_eval(model, config, eval_dataloader, logger, epoch):
+    model.eval()
 
+    scores_list = {}
+    scores_list['curr_preds_5'] = []
+    scores_list['rec_preds_5'] = []
+    scores_list['ndcg_preds_5'] = []
+    scores_list['curr_preds_20'] = []
+    scores_list['rec_preds_20'] = []
+    scores_list['ndcg_preds_20'] = []
 
-def accuracy(output, target, topk=(5, 20)): # output: [batch_size, item_size] target: [batch_size]
+    correct = 0
+    total = 0
+
+    logger.info("------------------------eval-----------------------------")
+    with torch.no_grad():
+        start = time.time()
+        for batch_idx, batch in enumerate(tqdm(eval_dataloader, desc="Iteration", ascii=True)):
+            inputs, targets = batch
+            inputs = inputs.to(config.device)
+
+            logits, _ = model(inputs, onecall=True) # [batch_size, item_size] only predict the last position
+
+            logits = logits.cpu()
+
+            accuracy(logits.numpy(), targets.numpy(), scores_list)
+
+            _, predicted = logits.max(1)
+            total += targets.size(0)
+            correct += predicted.eq(targets).sum().item()
+
+            # break
+
+        end = time.time()
+       
+    acc = 100. * correct / total
+    scores = {}
+    scores['mrr_5'] = sum(scores_list['curr_preds_5']) / float(len(scores_list['curr_preds_5']))
+    scores['mrr_20'] = sum(scores_list['curr_preds_20']) / float(len(scores_list['curr_preds_20']))
+    scores['hit_5'] = sum(scores_list['rec_preds_5']) / float(len(scores_list['rec_preds_5']))
+    scores['hit_20'] = sum(scores_list['rec_preds_20']) / float(len(scores_list['rec_preds_20']))
+    scores['ndcg_5'] = sum(scores_list['ndcg_preds_5']) / float(len(scores_list['ndcg_preds_5']))
+    scores['ndcg_20'] = sum(scores_list['ndcg_preds_20']) / float(len(scores_list['ndcg_preds_20']))
+
+    logger.info("Time for eval: {} mins".format(round((end - start) / 60)))
+    logger.info("Acc(hit@1): %.3f%%" % (acc))
+    logger.info("Accuracy mrr_5: {}".format(scores['mrr_5']))
+    logger.info("Accuracy mrr_20: {}".format(scores['mrr_20']))
+    logger.info("Accuracy hit_5: {}".format(scores['hit_5']))
+    logger.info("Accuracy hit_20: {}".format(scores['hit_20']))
+    logger.info("Accuracy ndcg_5: {}".format(scores['ndcg_5']))
+    logger.info("Accuracy ndcg_20: {}\n".format(scores['ndcg_20']))
+    
+    return  scores
+
+def sample_top_k(a=[], top_k=10):
+    idx = np.argsort(a)[::-1]
+    idx = idx[:top_k]
+    return idx
+
+def is_better(scores, best_scores):
+    if best_scores == None:
+        return True
+    else:
+        cnt = 0
+
+        total_cur = 0.0
+        total_best = 0.0
+
+        for key in scores:
+            total_best += round(best_scores[key], 4)
+            total_cur += round(scores[key], 4)
+            if round(scores[key], 4) >= round(best_scores[key], 4):
+                cnt += 1
+        
+        if cnt > len(scores.keys()) // 2 + 1:
+            return True
+        elif cnt == len(scores.keys) // 2 and total_cur > total_best:
+            return True
+        else:
+            return False
+
+def accuracy(output, target, scores_list, topk=(5, 20)): # output: [batch_size, item_size] target: [batch_size]
     """Computes the accuracy over the k top predictions for the specified values of k"""
-    global curr_preds_5
-    global rec_preds_5
-    global ndcg_preds_5
-    global curr_preds_20
-    global rec_preds_20
-    global ndcg_preds_20
-
     for bi in range(output.shape[0]):
-        pred_items_5 = utils.sample_top_k(output[bi], top_k=topk[0])  # top_k=5
-        pred_items_20 = utils.sample_top_k(output[bi], top_k=topk[1])
+        pred_items_5 = sample_top_k(output[bi], top_k=topk[0])  # top_k=5
+        pred_items_20 = sample_top_k(output[bi], top_k=topk[1])
 
         true_item=target[bi]
         predictmap_5={ch : i for i, ch in enumerate(pred_items_5)}
@@ -75,27 +197,28 @@ def accuracy(output, target, topk=(5, 20)): # output: [batch_size, item_size] ta
         rank_5 = predictmap_5.get(true_item)
         rank_20 = pred_items_20.get(true_item)
         if rank_5 == None:
-            curr_preds_5.append(0.0)
-            rec_preds_5.append(0.0)
-            ndcg_preds_5.append(0.0)
+            scores_list['curr_preds_5'].append(0.0)
+            scores_list['rec_preds_5'].append(0.0)
+            scores_list['ndcg_preds_5'].append(0.0)
         else:
             MRR_5 = 1.0/(rank_5+1)
             Rec_5 = 1.0#3
             ndcg_5 = 1.0 / math.log(rank_5 + 2, 2)  # 3
-            curr_preds_5.append(MRR_5)
-            rec_preds_5.append(Rec_5)#4
-            ndcg_preds_5.append(ndcg_5)  # 4
+            scores_list['curr_preds_5'].append(MRR_5)
+            scores_list['rec_preds_5'].append(Rec_5)#4
+            scores_list['ndcg_preds_5'].append(ndcg_5)  # 4
+
         if rank_20 == None:
-            curr_preds_20.append(0.0)
-            rec_preds_20.append(0.0)#2
-            ndcg_preds_20.append(0.0)#2
+            scores_list['curr_preds_20'].append(0.0)
+            scores_list['rec_preds_20'].append(0.0)#2
+            scores_list['ndcg_preds_20'].append(0.0)#2
         else:
             MRR_20 = 1.0/(rank_20+1)
             Rec_20 = 1.0#3
             ndcg_20 = 1.0 / math.log(rank_20 + 2, 2)  # 3
-            curr_preds_20.append(MRR_20)
-            rec_preds_20.append(Rec_20)#4
-            ndcg_preds_20.append(ndcg_20)  # 4
+            scores_list['curr_preds_20'].append(MRR_20)
+            scores_list['rec_preds_20'].append(Rec_20)#4
+            scores_list['ndcg_preds_20'].append(ndcg_20)  # 4
 
 def get_dataloader(config):
     pad = "<PAD>"

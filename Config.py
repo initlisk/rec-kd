@@ -1,13 +1,16 @@
 import time
+import os
 
 
 class BaseConfig():
 	def __init__(self, args):
 		self.lr = 0.001
-		self.reg = 0.001
+		self.reg = 1e-7
 		self.batch_size = 256
-		self.max_epoch = 1000
+		self.max_epoch = 100
 		self.early_stop = 20
+		self.eval_begin_epochs = 20
+		self.eval_per_epochs = 5
 
 		self.kd_method = args.kd_method
 		self.srs = args.srs
@@ -20,7 +23,12 @@ class BaseConfig():
 			self.dataset_path = None
 		self.eval_percentage = 0.2
 		
-		self.log_path = "log/{}_{}_{}_{}.log".format(self.kd_method, self.srs, self.dataset, time.strftime("%Y%m%d%H%M%S", time.localtime()))
+		tmp = "outputs/{}/{}/".format(self.srs, self.dataset)
+		if not os.path.exists(tmp):
+			os.makedirs(tmp)
+		tmp += "{}_{}".format(self.kd_method, time.strftime("%Y%m%d%H%M%S", time.localtime()))
+		self.log_path = tmp + ".log"
+		self.save_path = tmp + ".t7"
 
 class KD_Config(BaseConfig):
     def __init__(self, args):

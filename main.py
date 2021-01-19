@@ -1,5 +1,5 @@
 import argparse
-from Utils import *
+from utils import *
 
 
 
@@ -11,7 +11,7 @@ if __name__ == '__main__':
 	# dataset
 	parser.add_argument('--dataset', type=str, default='weishi')
 	
-	parser.add_argument('--device', type=str, default='cuda:0')
+	parser.add_argument('--device', type=str, default='cpu')
 
 	args = parser.parse_args()
 	print(args)
