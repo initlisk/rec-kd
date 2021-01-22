@@ -15,7 +15,6 @@ if __name__ == '__main__':
 
 	args = parser.parse_args()
 	print(args)
-	print ('\n')
 
 	if args.kd_method == "scratch":
 		from Config import SRS_Config as Config

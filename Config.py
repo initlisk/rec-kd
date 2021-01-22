@@ -1,6 +1,8 @@
 import time
 import os
 
+from torch.utils.data import dataset
+
 
 class BaseConfig():
 	def __init__(self, args):
@@ -21,7 +23,7 @@ class BaseConfig():
 			self.dataset_path = 'Dataset/weishi.csv'
 		else:
 			self.dataset_path = None
-		self.eval_percentage = 0.2
+		self.eval_percentage = 0.1
 		
 		tmp = "outputs/{}/{}/".format(self.srs, self.dataset)
 		if not os.path.exists(tmp):
@@ -29,6 +31,10 @@ class BaseConfig():
 		tmp += "{}_{}".format(self.kd_method, time.strftime("%Y%m%d%H%M%S", time.localtime()))
 		self.log_path = tmp + ".log"
 		self.save_path = tmp + ".t7"
+	
+	def log(self, logger):
+		logger.info("kd_method = {}, srs = {}, dataset = {}".format(self.kd_method, self.srs, self.dataset))
+		logger.info("lr = {}, reg = {}, batch_size = {}".format(self.lr, self.reg, self.batch_size))
 
 class KD_Config(BaseConfig):
     def __init__(self, args):
@@ -50,3 +56,13 @@ class SRS_Config(BaseConfig):
 			self.seq_len = 20
 			self.num_head = 8
 			self.dropout = 0.5
+
+	def log(self, logger):
+		super().log(logger)
+		logger.info("embed_size = {}, hidden_size = {}, item_num = {}".\
+			format(self.embed_size, self.hidden_size, self.item_num))
+		if self.srs.lower() == 'nextitnet':
+			logger.info("dilations = {}, kernel_size = {}".format(self.dilations, self.kernel_size))
+		elif self.srs.lower() == 'sasres':
+			logger.info("seq_len = {}, num_head = {}, dropout = {}".format(self.seq_len, self.num_head, self.dropout))
+			
