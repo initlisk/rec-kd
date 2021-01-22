@@ -29,6 +29,6 @@ if __name__ == '__main__':
 	config = Config(args)
 	train_dataloader, eval_dataloader, item_num = get_dataloader(config)
 	config.item_num = item_num
-	model = Model(config)
+	model = Model(config).to(config.device)
 
 	train(model, config, train_dataloader, eval_dataloader)
