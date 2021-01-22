@@ -78,7 +78,7 @@ def train(model, config,  train_dataloader, eval_dataloader):
                 logger.info('Loss: %.3f | Acc(hit@1): %.3f%% (%d/%d)' % (
                     train_loss / (batch_idx + 1), 100. * correct / total, correct, total))
              
-            # break
+            break
                     
 
         end = time.time()
@@ -133,7 +133,7 @@ def do_eval(model, config, eval_dataloader, logger, epoch):
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
 
-            # break
+            break
 
         end = time.time()
        

@@ -7,7 +7,7 @@ class BaseConfig():
 		self.lr = 0.001
 		self.reg = 1e-7
 		self.batch_size = 256
-		self.max_epoch = 100
+		self.max_epoch = 200
 		self.early_stop = 20
 		self.eval_begin_epochs = 20
 		self.eval_per_epochs = 5
@@ -44,7 +44,7 @@ class SRS_Config(BaseConfig):
 		self.embed_size = 256
 		self.hidden_size = 256
 		if self.srs.lower() == 'nextitnet':
-			self.dilations = [1, 4] * 3
+			self.dilations = [1, 4] * 12
 			self.kernel_size = 3
 		elif self.srs.lower() == 'sasres':
 			self.seq_len = 20
