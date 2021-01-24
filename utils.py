@@ -42,8 +42,7 @@ def train(model, config,  train_dataloader, eval_dataloader):
 
     no_imporve_epoch = 0
 
-    if config.kd_method == "scratch":
-        loss_func = nn.CrossEntropyLoss()
+    loss_func = nn.CrossEntropyLoss()
     
     for _epoch in trange(int(config.max_epoch), desc="Epoch"):
         model.train()
@@ -64,7 +63,7 @@ def train(model, config,  train_dataloader, eval_dataloader):
                 logits, _ = model(inputs)
                 loss = loss_func(logits, targets)
             else:
-                loss, logits = model(inputs) 
+                logits, loss = model(inputs, targets) 
 
             loss.backward()
         
@@ -80,7 +79,7 @@ def train(model, config,  train_dataloader, eval_dataloader):
                 logger.info('Loss: %.3f | Acc(hit@1): %.3f%% (%d/%d)' % (
                     train_loss / (batch_idx + 1), 100. * correct / total, correct, total))
              
-            break
+            # break
                     
 
         end = time.time()
@@ -93,10 +92,16 @@ def train(model, config,  train_dataloader, eval_dataloader):
             scores = do_eval(model, config, eval_dataloader,logger, _epoch+1)
             no_imporve_epoch += 1
             if is_better(scores, best_scores):
-                state = {
-                    'net': model.state_dict(),
-                    'scores': scores,
-                }
+                if config.kd_method == "scratch":
+                    state = {
+                        'net': model.state_dict(),
+                        'scores': scores,
+                    }
+                else:
+                    state = {
+                        'net': model.student_model.state_dict(),
+                        'scores': scores
+                    }
                 best_scores = scores
                 torch.save(state, config.save_path)
                 no_imporve_epoch = 0
@@ -125,8 +130,11 @@ def do_eval(model, config, eval_dataloader, logger, epoch):
             inputs, targets = batch
             inputs = inputs.to(config.device)
 
-            logits, _ = model(inputs, onecall=True) # [batch_size, item_size] only predict the last position
-
+            if config.kd_method == "scratch":
+                logits, _ = model(inputs, onecall=True) # [batch_size, item_size] only predict the last position
+            else:
+                logits, _ = model(inputs, targets, onecall=True)
+                
             logits = logits.cpu()
 
             accuracy(logits.numpy(), targets.numpy(), scores_list)
@@ -135,7 +143,7 @@ def do_eval(model, config, eval_dataloader, logger, epoch):
             total += targets.size(0)
             correct += predicted.eq(targets).sum().item()
 
-            break
+            # break
 
         end = time.time()
        

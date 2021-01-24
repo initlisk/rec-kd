@@ -1,11 +1,17 @@
 import time
 import os
 
+from torch import set_flush_denormal
+
 
 class BaseConfig():
 	def __init__(self, args):
-		self.lr = 0.001
-		self.reg = 1e-7
+		if args.srs.lower() == "nextitnet":
+			self.lr = 1e-3
+		else:
+			self.lr = 1e-4
+
+		self.reg = 0
 		self.batch_size = 128
 		self.max_epoch = 100
 		self.early_stop = 10
@@ -34,13 +40,27 @@ class BaseConfig():
 	def log(self, logger):
 		logger.info("kd_method = {}, srs = {}, dataset = {}".format(self.kd_method, self.srs, self.dataset))
 		logger.info("lr = {}, reg = {}, batch_size = {}".format(self.lr, self.reg, self.batch_size))
+	
+	def setTwoVal(self, item_num, seq_len):
+		pass
 
 class KD_Config(BaseConfig):
-    def __init__(self, args):
-        super(KD_Config, self).__init__(args)
+	def __init__(self, args):
+		super(KD_Config, self).__init__(args)
+		self.student_config = SRS_Config(args)
+		args.hidden_size *= 2
+		args.embed_size *= 2
+		args.block_num *= 2
+		self.teacher_config = SRS_Config(args)
+		self.teacher_path = "outputs/{}/{}/scratch_teacher.t7".format(self.srs, self.dataset)
 
-        
-        self.teacher_model = None
+	def log(self, logger):
+		self.student_config.log(logger)
+		logger.info("teacher_path = {}".format(self.teacher_path))
+	
+	def setTwoVal(self, item_num, seq_len):
+		self.teacher_config.setTwoVal(item_num, seq_len)
+		self.student_config.setTwoVal(item_num, seq_len)
 
 class SRS_Config(BaseConfig):
 	def __init__(self, args):
@@ -65,4 +85,7 @@ class SRS_Config(BaseConfig):
 			logger.info("kernel_size = {}".format(self.kernel_size))
 		elif self.srs.lower() == 'sasrec':
 			logger.info("num_head = {}, dropout = {}".format(self.num_head, self.dropout))
-			
+	
+	def setTwoVal(self, item_num, seq_len):
+		self.item_num = item_num
+		self.seq_len = seq_len
