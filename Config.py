@@ -1,17 +1,15 @@
 import time
 import os
 
-from torch.utils.data import dataset
-
 
 class BaseConfig():
 	def __init__(self, args):
 		self.lr = 0.001
 		self.reg = 1e-7
-		self.batch_size = 256
-		self.max_epoch = 200
-		self.early_stop = 20
-		self.eval_begin_epochs = 20
+		self.batch_size = 128
+		self.max_epoch = 100
+		self.early_stop = 10
+		self.eval_begin_epochs = 0
 		self.eval_per_epochs = 5
 
 		self.kd_method = args.kd_method
@@ -23,6 +21,7 @@ class BaseConfig():
 			self.dataset_path = 'Dataset/weishi.csv'
 		else:
 			self.dataset_path = None
+
 		self.eval_percentage = 0.1
 		
 		tmp = "outputs/{}/{}/".format(self.srs, self.dataset)
@@ -47,22 +46,23 @@ class SRS_Config(BaseConfig):
 	def __init__(self, args):
 		super(SRS_Config, self).__init__(args)
 		self.item_num = -1
-		self.embed_size = 256
-		self.hidden_size = 256
+		self.embed_size = args.embed_size
+		self.hidden_size = args.hidden_size
+		self.seq_len = -1
+		self.block_num = args.block_num
 		if self.srs.lower() == 'nextitnet':
-			self.dilations = [1, 4] * 12
+			self.dilations = [1, 4] * self.block_num
 			self.kernel_size = 3
-		elif self.srs.lower() == 'sasres':
-			self.seq_len = 20
-			self.num_head = 8
-			self.dropout = 0.5
+		elif self.srs.lower() == 'sasrec':
+			self.num_head = 2
+			self.dropout = 0
 
 	def log(self, logger):
 		super().log(logger)
-		logger.info("embed_size = {}, hidden_size = {}, item_num = {}".\
-			format(self.embed_size, self.hidden_size, self.item_num))
+		logger.info("bolck_num = {}, embed_size = {}, hidden_size = {}, item_num = {}, seq_len = {}".\
+			format(self.block_num, self.embed_size, self.hidden_size, self.item_num, self.seq_len))
 		if self.srs.lower() == 'nextitnet':
-			logger.info("dilations = {}, kernel_size = {}".format(self.dilations, self.kernel_size))
-		elif self.srs.lower() == 'sasres':
-			logger.info("seq_len = {}, num_head = {}, dropout = {}".format(self.seq_len, self.num_head, self.dropout))
+			logger.info("kernel_size = {}".format(self.kernel_size))
+		elif self.srs.lower() == 'sasrec':
+			logger.info("num_head = {}, dropout = {}".format(self.num_head, self.dropout))
 			

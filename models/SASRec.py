@@ -9,25 +9,26 @@ class SASRec(nn.Module):
     def __init__(self, config):
         super(SASRec, self).__init__()
         
-        assert config['model_type'].lower() == "sasrec", "Wrong config file of the model, expected SASRec, but get {}.\n".format(config["model_type"])
+        assert config.srs.lower() == "sasrec", "Wrong config file of the model, expected SASRec, but get {}.\n".format(config["model_type"])
 
-        self.item_num = config['item_num']
-        self.embed_size = config['embed_size']
-        self.seq_len = config['seq_len']
+        self.item_num = config.item_num
+        self.embed_size = config.embed_size
+        self.seq_len = config.seq_len
+        self.block_num = config.block_num
         self.item_embedding = nn.Embedding(self.item_num, self.embed_size)
         self.pos_embedding = nn.Embedding(self.seq_len, self.embed_size)
         stdv = np.sqrt(1. / self.item_num)
-        self.item_embeding.weight.data.uniform_(-stdv, stdv) # important initializer
+        self.item_embedding.weight.data.uniform_(-stdv, stdv) # important initializer
         stdv = np.sqrt(1. / self.seq_len)
         self.pos_embedding.weight.data.uniform_(-stdv, stdv)
         
-        self.hidden_size = config['hidden_size']
-        self.device = config['device']
+        self.hidden_size = config.hidden_size
+        self.device = config.device
 
         self.layer_norm = nn.LayerNorm(self.hidden_size, eps=1e-6)
         
-        tb = [Transformer_Block(config['n_head'], self.hidden_size, self.hidden_size // config['n_head'],\
-              self.hidden_size // config['n_head'], config['dropout']) for i in range(self.block_num)]
+        tb = [Transformer_Block(config.num_head, self.hidden_size, self.hidden_size // config.num_head,\
+              self.hidden_size // config.num_head, config.dropout) for i in range(self.block_num)]
                         
         self.transformer_blocks = nn.Sequential(*tb) 
         
