@@ -4,9 +4,17 @@ from utils import *
 
 
 if __name__ == '__main__':
+	def str2bool(v):
+		if v.lower() in ('yes', 'true', 't', 'y', '1'):
+			return True
+		elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+			return False
+		else:
+			raise argparse.ArgumentTypeError('Unsupported value encountered.')
+
 	parser = argparse.ArgumentParser()
 
-	parser.add_argument('--kd_method', type=str, default='vanilla_kd')
+	parser.add_argument('--kd_method', type=str, default='bertemd')
 	parser.add_argument('--srs', type=str, default='nextitnet')
 	# dataset
 
@@ -17,6 +25,9 @@ if __name__ == '__main__':
 	parser.add_argument('--dataset', type=str, default='weishi')
 	
 	parser.add_argument('--device', type=str, default='cpu')
+
+	parser.add_argument('--update_weight', default="true", type=str2bool)
+	parser.add_argument('--use_attn', default="true", type=str2bool)
 
 	args = parser.parse_args()
 

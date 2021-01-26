@@ -172,6 +172,11 @@ def sample_top_k(a=[], top_k=10):
     idx = idx[:top_k]
     return idx
 
+def softmax(x):
+    """Compute softmax values for each sets of scores in x."""
+    e_x = np.exp(x - np.max(x))
+    return e_x / e_x.sum(axis=0) # only difference
+    
 def is_better(scores, best_scores):
     if best_scores == None:
         return True

@@ -53,6 +53,9 @@ class KD_Config(BaseConfig):
 		args.block_num *= 2
 		self.teacher_config = SRS_Config(args)
 		self.teacher_path = "outputs/{}/{}/scratch_teacher.t7".format(self.srs, self.dataset)
+		if self.kd_method == "bertemd":
+			self.use_attn = args.use_attn
+			self.update_weight = args.update_weight
 
 	def log(self, logger):
 		self.student_config.log(logger)
