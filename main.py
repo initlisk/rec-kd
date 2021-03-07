@@ -14,7 +14,7 @@ if __name__ == '__main__':
 
 	parser = argparse.ArgumentParser()
 
-	parser.add_argument('--kd_method', type=str, default='bertemd')
+	parser.add_argument('--kd_method', type=str, default='de')
 	parser.add_argument('--srs', type=str, default='nextitnet')
 	# dataset
 

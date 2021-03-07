@@ -56,6 +56,8 @@ class KD_Config(BaseConfig):
 		if self.kd_method == "bertemd":
 			self.use_attn = args.use_attn
 			self.update_weight = args.update_weight
+		elif self.kd_method == "de":
+			self.num_experts = 10
 
 	def log(self, logger):
 		self.student_config.log(logger)
